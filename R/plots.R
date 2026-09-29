@@ -31,8 +31,9 @@ DARK      <- FALSE
 use_dark_theme <- function() {
   INK   <<- "#ffffff"; INK2 <<- "#9cb7c9"; MUTED <<- "#7f9aab"
   GRIDC <<- "#1c4a57"; SURF <<- "#052832"
-  # on dark, more oil = brighter (validated ordinal ramp vs #052832)
-  POLL_COLS <<- c("#16434f", "#a8380f", "#e0531f", "#ff8a52", "#ffc4a3")
+  # pale orange -> deep red: darker/redder = more oil, as in the tables
+  # (validated ordinal ramp; the deepest red still clears 2.5:1 on #052832)
+  POLL_COLS <<- c("#16434f", "#fcc5a0", "#f6874f", "#e04a24", "#c01f14")
   LOLLI <<- c(seg = "#a8380f", pt = "#ff6633")
   DARK  <<- TRUE
   invisible(TRUE)
