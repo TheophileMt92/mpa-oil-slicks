@@ -1,0 +1,227 @@
+---
+title: "Oil in marine protected areas"
+subtitle: "Which MPAs are exposed to satellite-detected oil slicks, and does protection level matter?"
+date: today
+format:
+  html:
+    theme: none
+    css: template/custom.css
+    include-in-header: template/header.html
+    include-after-body: template/footer.html
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    fig-width: 9
+    fig-height: 6
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(data.table)
+library(ggplot2)
+library(scales)
+library(reactable)
+library(sf)
+source("R/plots.R")
+
+exposure <- as.data.table(readRDS("data/mpa_exposure.rds"))
+cls      <- as.data.frame(readRDS("data/class_summary.rds"))
+pts      <- as.data.table(readRDS("data/slick_points.rds"))
+info     <- readRDS("data/run_info.rds")
+
+fmt  <- function(x, d = 0) format(round(x, d), big.mark = ",", nsmall = d)
+pct  <- function(x) sprintf("%.0f%%", 100 * x)
+
+oiled   <- exposure[n_slicks > 0]
+by_cls  <- exposure[, .(n = .N, oiled = sum(n_slicks > 0),
+                        share = mean(n_slicks > 0)), by = .(prot_class, class_label)][order(prot_class)]
+top     <- as.data.table(top_mpas(as.data.frame(exposure)))
+a       <- cls[cls$class == "all", ]
+```
+
+## The question
+
+In September 2026 SkyTruth published a global estimate of marine oil pollution:
+around 1.6 million km² of ocean surface covered by oil slicks every year, most of
+it from ships and offshore platforms, and most of it inside national waters. Their
+report notes in passing that marine protected areas are not spared.
+
+This note takes that further with the same underlying data, SkyTruth's
+[Cerulean](https://cerulean.skytruth.org) slick detections from Sentinel-1
+radar, and asks two questions:
+
+1. **Which MPAs are actually exposed to oil**, by name, and how much?
+2. **Does the level of protection make a difference**, once you account for
+   where MPAs sit and how often satellites look at them?
+
+Between `r format(info$start, "%B %Y")` and `r format(info$end, "%B %Y")`,
+Cerulean recorded `r fmt(info$n_slicks)` slicks matched to a nearby vessel or
+platform. Of the `r fmt(nrow(exposure))` marine protected areas in the WDPA,
+**`r fmt(nrow(oiled))` (`r pct(nrow(oiled) / nrow(exposure))`) had at least one
+detected inside them.**
+
+## The most exposed MPAs
+
+```{r top, fig.height = 9}
+plot_top_mpas(as.data.frame(exposure), info)
+```
+
+Ranking by oil area per unit of MPA area favours small coastal sites near busy
+shipping lanes and ports, which is the point: these are the places where a
+protected designation and chronic oil exposure coincide most intensely. MPAs
+smaller than 100 km² or with fewer than three slicks are left out, because a
+single large slick in a tiny reserve produces a spectacular density that says
+little about chronic exposure.
+
+The top of the list is
+**`r top$NAME[1]`** (`r top$country[1]`, `r top$class_label[1]`), with
+`r top$n_slicks[1]` slicks covering `r fmt(top$oil_km2[1], 1)` km² inside its
+boundary over `r info$n_years` years.
+
+### The largest totals
+
+Density hides the big offshore MPAs, where exposure is diluted by sheer size but
+the absolute amount of oil can be large.
+
+```{r total}
+tt <- exposure[n_slicks > 0][order(-oil_km2)][1:15]
+tt[, y := sprintf("%s  (%s)", ifelse(nchar(NAME) > 42, paste0(substr(NAME, 1, 40), "\u2026"), NAME), country)]
+tt[, y := factor(y, levels = rev(unique(y)))]
+
+ggplot(tt, aes(oil_km2, y, fill = as.character(prot_class))) +
+  geom_col(width = 0.65) +
+  geom_text(aes(label = sprintf("%s slicks", fmt(n_slicks))), hjust = -0.15,
+            size = 3, colour = INK2) +
+  scale_fill_manual(values = CLASS_COLS, labels = info$class_labels,
+                    breaks = names(info$class_labels)) +
+  scale_x_continuous(labels = label_comma(), expand = expansion(mult = c(0, 0.2))) +
+  coord_cartesian(clip = "off") +
+  labs(title = "Where the most oil ends up inside MPAs",
+       subtitle = sprintf("Total oil-slick area detected inside each MPA, %s-%s",
+                          format(info$start, "%Y"), format(info$end, "%Y")),
+       x = "Oil-slick area inside the MPA (km²)", y = NULL) +
+  theme_oil()
+```
+
+## Where
+
+```{r map, fig.height = 5.5}
+world <- rnaturalearth::ne_countries(scale = 110, returnclass = "sf")
+m <- st_as_sf(oiled, coords = c("lon", "lat"), crs = 4326)
+bg <- st_as_sf(pts[sample(.N, min(.N, 30000))], coords = c("lon", "lat"), crs = 4326)
+
+ggplot() +
+  geom_sf(data = world, fill = "#e9e8e3", colour = NA) +
+  geom_sf(data = bg, colour = "#52514e", size = 0.05, alpha = 0.25) +
+  geom_sf(data = m[order(-m$oil_km2), ], aes(size = oil_km2, fill = as.character(prot_class)),
+          shape = 21, colour = SURF, stroke = 0.3, alpha = 0.9) +
+  scale_size_area(max_size = 9, labels = label_comma(), name = "km² of oil") +
+  scale_fill_manual(values = CLASS_COLS, labels = info$class_labels,
+                    breaks = names(info$class_labels), name = NULL) +
+  coord_sf(crs = "EPSG:8857", expand = FALSE) +
+  labs(title = "MPAs with oil detected inside them",
+       subtitle = "Circles: MPAs, sized by oil-slick area inside. Grey dots: all detected slicks (sample).") +
+  theme_oil() +
+  guides(size = guide_legend(override.aes = list(fill = MUTED)),
+         fill = guide_legend(override.aes = list(size = 4))) +
+  theme(axis.text.x = element_blank(), axis.text.y = element_blank(),
+        panel.grid.major = element_blank(), legend.box = "vertical")
+```
+
+The pattern follows SkyTruth's global hotspots: the Mediterranean and Black
+Sea, the Red Sea and Persian Gulf, West Africa and Southeast Asia. The grey dots
+also show the limit of this kind of data: open-ocean areas are sparse because
+Sentinel-1 rarely images them, not necessarily because they are clean.
+
+## Does protection level matter?
+
+Comparing the oil density inside MPAs with the global ocean average would be
+misleading: MPAs are mostly coastal, where both shipping and satellite coverage
+are concentrated. Instead, each protection class is compared with the
+unprotected ocean within `r info$ring_km` km of it, which shares the same
+satellite revisit pattern, shipping context and sea state.
+
+```{r classes, fig.height = 7}
+plot_classes(cls, info)
+```
+
+Across all MPAs, oil density inside is `r sprintf("%.2f", a$ratio)` times that of
+the surrounding ocean (95% CI `r sprintf("%.2f-%.2f", a$ratio_lo, a$ratio_hi)`).
+
+```{r class-table}
+reactable(
+  data.table(`Protection class` = cls$label,
+             MPAs = cls$n_mpas,
+             `With slicks` = cls$n_mpas_oiled,
+             `Share with slicks` = sprintf("%.1f%%", 100 * cls$n_mpas_oiled / cls$n_mpas),
+             `Density inside` = round(cls$dens_in, 3),
+             `Density around` = round(cls$dens_ring, 3),
+             `Ratio [95% CI]` = sprintf("%.2f [%.2f-%.2f]", cls$ratio, cls$ratio_lo, cls$ratio_hi)),
+  compact = TRUE, pagination = FALSE,
+  defaultColDef = colDef(format = colFormat(separators = TRUE)))
+```
+
+Densities are km² of slick per 10,000 km² of ocean per year.
+
+## The full table
+
+All MPAs with at least one slick detected inside them.
+
+```{r full}
+ft <- oiled[order(-oil_per_1000km2_yr),
+            .(MPA = NAME, Country = country, Designation = DESIG_ENG,
+              IUCN = IUCN_CAT, Class = class_label,
+              `Area (km²)` = round(marine_km2),
+              Slicks = n_slicks, `Months with slicks` = n_months,
+              `Oil inside (km²)` = round(oil_km2, 2),
+              `Oil per 1,000 km² per yr` = round(oil_per_1000km2_yr, 2))]
+reactable(ft, searchable = TRUE, defaultPageSize = 15, compact = TRUE, highlight = TRUE,
+          defaultColDef = colDef(format = colFormat(separators = TRUE)))
+```
+
+## Caveats
+
+**Detection is not measurement.** Cerulean detects slicks on Sentinel-1 radar
+images. A place imaged twice a month will record fewer slicks than one imaged
+every few days, whatever the true pollution. The per-MPA figures are therefore
+*detected* exposure, and the open ocean and some high-latitude regions are
+under-sampled. The class comparison controls for this with neighbouring waters;
+the per-MPA ranking does not.
+
+**Only source-matched slicks.** Following SkyTruth's recommendation, slicks are
+kept only if Cerulean's attribution model links them to a nearby vessel or
+offshore platform (collated score > 0). This removes most false positives but
+also slicks from unknown sources, which biases the sample towards shipping lanes
+and oil fields.
+
+**Protection class is taken from IUCN management categories as reported to the
+WDPA.** Categories I-III are treated as no-take, IV-VI as multiple-use. Many MPAs
+report no category at all, and the category describes management intent, not
+enforcement.
+
+**Slick area is the surface footprint on the day of the image,** not a volume.
+A thin sheen and a thick spill of the same extent count the same.
+
+**Attribution is proximity, not proof.** A slick inside an MPA was detected
+there; it was not necessarily released there, and the nearby vessel is a
+candidate, not a culprit.
+
+## Reproducing this
+
+```bash
+Rscript prep/build_data.R      # downloads + analysis, writes data/ (30-60 min first run)
+Rscript linkedin_figures.R     # PNGs in outputs/
+quarto render index.qmd
+```
+
+Slicks: `r info$slick_filter`, `r format(info$start)` to `r format(info$end)`.
+Grid: `r info$res_km` km equal-area (Equal Earth). Ring: `r info$ring_km` km.
+Bootstrap: `r fmt(info$n_boot)` resamples of months. Data built on
+`r format(info$run_date)`.
+
+Oil slick data: SkyTruth Cerulean, derived from Copernicus Sentinel-1 imagery.
+Protected areas: UNEP-WCMC and IUCN, World Database on Protected Areas,
+[protectedplanet.net](https://www.protectedplanet.net). Coastlines: Natural Earth.
