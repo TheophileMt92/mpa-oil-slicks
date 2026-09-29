@@ -101,6 +101,17 @@ table_theme <- function() {
                  borderRadius = "4px"))
 }
 
+# The WDPA often lists one site several times under different designations
+# (e.g. a UK Marine Protected Area that is also an Emerald Network site), which
+# would double-count its oil. Keep one row per country + name + area (2 s.f.).
+dedupe_sites <- function(exposure) {
+  key <- paste(exposure$country, tolower(trimws(exposure$NAME)),
+               signif(exposure$marine_km2, 2), sep = "|")
+  o <- order(key, -exposure$oil_km2, exposure$prot_class)   # keep the most exposed record
+  keep <- o[!duplicated(key[o])]
+  exposure[sort(keep), ]
+}
+
 wrap_title <- function(x, width = 52) paste(strwrap(x, width), collapse = "\n")
 
 # ---- Most exposed MPAs --------------------------------------------------------

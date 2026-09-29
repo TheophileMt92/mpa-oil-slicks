@@ -1,24 +1,29 @@
 # mpa-oil-slicks
 
-Which marine protected areas are exposed to oil, and does the level of
-protection make a difference?
+Which countries and which marine protected areas are exposed to oil?
 
 Satellite-detected oil slicks from SkyTruth's
 [Cerulean](https://cerulean.skytruth.org) (Sentinel-1 radar + machine learning,
 2023-2025) are intersected with every marine protected area in the World
-Database on Protected Areas. The report names the most exposed MPAs and compares
-oil density inside each protection class with the unprotected ocean around it.
+Database on Protected Areas.
+
+**Report:** https://theophilemt92.github.io/mpa-oil-slicks/
+
+![Oil slicks inside marine protected areas, country by country](figures/fig_country_grid.png)
+
+![Oil slicks detected inside marine protected areas, by country](figures/fig_country_ranking.png)
 
 ## Contents
 
 | Path | What it is |
 | --- | --- |
-| `index.qmd` | The report: most exposed MPAs, largest totals, map, protection-class comparison, full searchable table, caveats. |
+| `index.qmd` | The report: country ranking, country-by-country grid, protection-level and MPA-by-MPA tables, caveats. |
 | `prep/build_data.R` | Pipeline: downloads slicks from the Cerulean API and MPAs from the WDPA, computes per-MPA exposure and the class comparison, writes `data/`. |
-| `linkedin_figures.R` | Renders the two LinkedIn images to `outputs/` and prints the numbers for the post text. |
+| `linkedin_figures.R` | Renders the two figures above to `figures/` (same dark style as the report) and prints the numbers for the post text. |
 | `R/plots.R` | Plot functions shared by the report and the LinkedIn script, so both stay identical. |
 | `template/` | CSS, header and footer for the report's HTML output. |
 | `data/` | Small report-ready tables written by the pipeline (see below). |
+| `figures/` | The README / LinkedIn figures. |
 
 ## Running it
 
@@ -30,8 +35,8 @@ install.packages(c("httr2", "sf", "terra", "dplyr", "tidyr", "purrr", "readr",
 
 ```bash
 Rscript prep/build_data.R      # first run 30-60 min; caches in raw/ (gitignored)
-Rscript linkedin_figures.R     # outputs/: beeswarm, dark map, protection classes
-quarto render index.qmd        # index.html, for GitHub Pages
+Rscript linkedin_figures.R     # figures/: country grid (LinkedIn) and country ranking
+quarto publish gh-pages index.qmd   # renders and publishes to GitHub Pages
 ```
 
 `wdpar::wdpa_fetch()` drives a headless Chrome to download the global WDPA
@@ -104,6 +109,11 @@ none.
 
 **Surface area, not volume.** A thin sheen and a thick spill of the same extent
 count the same.
+
+**Sites listed more than once are counted once.** The WDPA often records the same
+place under several designations (e.g. a UK MPA that is also an Emerald Network
+site). `dedupe_sites()` in `R/plots.R` merges records with the same country, name
+and area so their oil is not double-counted.
 
 **Proximity is not attribution.** A slick detected inside an MPA was not
 necessarily released there.

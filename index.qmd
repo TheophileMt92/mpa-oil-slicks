@@ -38,7 +38,7 @@ library(sf)
 source("R/plots.R")
 use_dark_theme()   # charts and tables match the dark report stylesheet
 
-exposure <- as.data.table(readRDS("data/mpa_exposure.rds"))
+exposure <- as.data.table(dedupe_sites(readRDS("data/mpa_exposure.rds")))
 cls      <- as.data.frame(readRDS("data/class_summary.rds"))
 pts      <- as.data.table(readRDS("data/slick_points.rds"))
 info     <- readRDS("data/run_info.rds")
@@ -202,6 +202,11 @@ and oil fields.
 WDPA.** Categories I-III are treated as no-take, IV-VI as multiple-use. Many MPAs
 report no category at all, and the category describes management intent, not
 enforcement.
+
+**Sites listed more than once are counted once.** The WDPA often records the
+same place under several designations (for example a national marine protected
+area that is also an Emerald Network or Natura 2000 site). Records with the same
+country, name and area are merged so their oil is not double-counted.
 
 **Slick area is the surface footprint on the day of the image,** not a volume.
 A thin sheen and a thick spill of the same extent count the same.
