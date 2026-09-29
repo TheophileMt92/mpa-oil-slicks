@@ -352,7 +352,7 @@ plot_country_grid <- function(exposure, info, n_countries = 10, ncol = 50,
   g <- country_grid_data(exposure, n_countries, ncol, min_km2, rank_by = rank_by)
   d <- g$d; tot <- g$tot
   tot$lab1 <- tot$country
-  tot$lab2 <- sprintf("%s of %s MPAs with oil\n%s km² of slicks inside",
+  tot$lab2 <- sprintf("%s of %s MPAs with oil\n%s km² cumulative slick area",
                       fmt_int(tot$oiled), fmt_int(tot$n), fmt_int(round(tot$oil_km2)))
   if (is.null(title)) title <- "Oil slicks inside marine protected areas, country by country"
   rank_txt <- switch(rank_by, oiled = "the most MPAs with oil detected inside",

@@ -126,8 +126,10 @@ satellite coverage and shipping context, so the ratio compares like with like.
 
 ### All MPAs with oil
 
-Every MPA with at least one slick detected inside it, ordered by the total
-oil-slick area inside its boundary (the same measure as the country chart).
+Every MPA with at least one slick detected inside it, ordered by the cumulative
+oil-slick area inside its boundary (the same measure as the country chart): the
+area of every slick detected there over 2023-2025, added up. Because the same
+waters can be oiled many times, this can exceed the MPA's own area.
 "Oil per 1,000 km²" divides that by the MPA's size: it puts small, heavily hit
 reserves at the top when you sort by it, which is why it is not the default order.
 
@@ -137,7 +139,7 @@ ft <- oiled[order(-oil_km2),
             .(MPA = NAME, Country = country, Designation = DESIG_ENG,
               IUCN = IUCN_CAT, `Area (km²)` = marine_km2,
               Slicks = n_slicks, `Months with slicks` = n_months,
-              `Oil inside (km²)` = oil_km2,
+              `Cumulative slick area (km²)` = oil_km2,
               `Oil per 1,000 km² per yr` = oil_per_1000km2_yr)]
 lvl <- poll_bins(ft$`Oil per 1,000 km² per yr`)
 heat <- setNames(POLL_COLS_LIGHT[seq_along(levels(lvl))], levels(lvl))
@@ -170,7 +172,7 @@ tbl <- reactable(ft, theme = table_theme(), searchable = TRUE, defaultPageSize =
             Designation = colDef(minWidth = 160),
             IUCN        = colDef(minWidth = 115, align = "center"),
             `Area (km²)` = colDef(format = colFormat(separators = TRUE, digits = 0)),
-            `Oil inside (km²)` = colDef(format = colFormat(separators = TRUE, digits = 1)),
+            `Cumulative slick area (km²)` = colDef(format = colFormat(separators = TRUE, digits = 1)),
             `Oil per 1,000 km² per yr` = colDef(
               format = colFormat(digits = 2),
               style = function(value, index) {
