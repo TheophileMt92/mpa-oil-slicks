@@ -17,7 +17,7 @@ exposure <- dedupe_sites(readRDS("data/mpa_exposure.rds"))
 cls      <- readRDS("data/class_summary.rds")
 info     <- readRDS("data/run_info.rds")
 
-N_COUNTRIES <- 8           # fits a portrait LinkedIn image; the report shows 20
+N_COUNTRIES <- 10          # fits a LinkedIn image (about square); the report shows 20
 RANK_BY     <- "oil_km2"   # "oil_km2" (total slick area), "oiled" (n MPAs with oil), "share"
 MIN_KM2     <- 1           # hide MPAs smaller than this (km2)
 
