@@ -1,77 +1,83 @@
 /* =============================================================
-   Théophile Mouton — Quarto Ocean Theme
-   Usage: add `css: custom.css` to your YAML front matter
+   Théophile Mouton · DataSphere Analytics
+   Quarto theme: "Deep ocean" (dark teal, oil-orange accent)
+   Colour scheme modelled on SkyTruth's 2026 global oil pollution
+   report; fonts are free Google Fonts lookalikes.
+   Usage: `css: template/custom.css` with `theme: none`
    ============================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=Source+Sans+3:wght@300;400;600&family=Source+Code+Pro:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap');
 
 /* ── Colour tokens ──────────────────────────────────────────── */
 :root {
-  --ocean-deep:    #062d4a;
-  --ocean-mid:     #0d4f7a;
-  --ocean-surface: #1a7fa8;
-  --ocean-light:   #4eb8d4;
-  --ocean-foam:    #c8eaf4;
-  --sand:          #f5f0e8;
-  --text-primary:  #1a2332;
-  --text-secondary:#445566;
-  --accent:        #1a7fa8;
-  --rule:          rgba(26, 127, 168, 0.2);
+  --bg:            #052832;   /* page / content sections        */
+  --bg-deep:       #00131f;   /* header, footer, code, table hd */
+  --bg-raised:     #07333f;   /* cards, stripes, callouts       */
+  --text-primary:  #ffffff;
+  --text-secondary:#9cb7c9;
+  --text-muted:    #7f9aab;
+  --accent:        #ff6633;   /* oil orange: highlights         */
+  --accent-deep:   #ca6202;   /* borders, rules                 */
+  --link:          #9ec6b9;   /* soft mint links                */
+  --rule:          rgba(156, 183, 201, 0.18);
   --header-height: 200px;
-  --footer-height: 110px;
 }
 
 /* ── Base typography ────────────────────────────────────────── */
+html, body { background: var(--bg); }
+
 body {
-  font-family: 'Source Sans 3', sans-serif;
-  font-size: 17px;
-  line-height: 1.75;
+  font-family: 'Inter', Arial, sans-serif;
+  font-size: 16.5px;
+  line-height: 1.7;
   color: var(--text-primary);
-  background: #ffffff;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
 }
 
 h1, h2, h3, h4 {
-  font-family: 'Playfair Display', Georgia, serif;
-  color: var(--ocean-deep);
-  font-weight: 600;
-  margin-top: 2rem;
-  line-height: 1.25;
+  font-family: 'Newsreader', Georgia, serif;
+  color: var(--text-primary);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  margin-top: 2.4rem;
+  line-height: 1.2;
 }
 
-h1 { font-size: 2.2rem; border-bottom: 2px solid var(--rule); padding-bottom: .5rem; }
-h2 { font-size: 1.65rem; }
-h3 { font-size: 1.3rem; }
+h1 { font-size: 2.6rem; }
+h2 { font-size: 1.85rem; padding-bottom: .4rem; border-bottom: 1px solid var(--rule); }
+h3 { font-size: 1.35rem; color: var(--accent); }
 h4 { font-size: 1.1rem; color: var(--text-secondary); }
 
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+strong { color: #ffffff; font-weight: 600; }
+em     { color: var(--text-secondary); }
+
+a { color: var(--link); text-decoration: none; border-bottom: 1px solid rgba(158,198,185,.35); }
+a:hover { color: #ffffff; border-bottom-color: #ffffff; }
 
 p { margin: 0 0 1.1rem; }
+li::marker { color: var(--accent); }
 
-code, pre {
-  font-family: 'Source Code Pro', monospace;
-  font-size: 0.88em;
+code, pre { font-family: 'JetBrains Mono', monospace; font-size: 0.84em; }
+p code, li code {
+  background: var(--bg-raised);
+  color: #ffd2bd;
+  padding: .1em .35em;
+  border-radius: 3px;
 }
 
 /* ── Main content area ──────────────────────────────────────── */
-#quarto-content,
-.content,
-main {
-  max-width: 800px;
+#quarto-content, .content, main {
+  max-width: 820px;
   margin: 0 auto;
   padding: 2.5rem 4rem 3rem;
   box-sizing: border-box;
 }
 
-/* Quarto wraps content in several nested divs — constrain them all */
-#quarto-document-content,
-.page-columns,
-.page-full,
-#quarto-margin-sidebar,
-.quarto-title-block {
-  max-width: 800px !important;
+#quarto-document-content, .page-columns, .page-full,
+#quarto-margin-sidebar, .quarto-title-block {
+  max-width: 820px !important;
   margin-left: auto !important;
   margin-right: auto !important;
   padding-left: 4rem;
@@ -79,302 +85,164 @@ main {
   box-sizing: border-box;
 }
 
-/* The column-body is the main text column inside page-columns */
-.column-body,
-.column-page,
-.column-screen-inset {
+.column-body, .column-page, .column-screen-inset {
   max-width: 100% !important;
   width: 100% !important;
 }
 
-body {
-  overflow-x: hidden;
+/* With `theme: none` Quarto emits no wrapper: give top-level elements side
+   padding (full width, as in the original template) except header/footer */
+body > *:not(.ocean-header):not(.ocean-footer):not(script):not(style):not(.glightbox-container):not(.goverlay) {
+  padding-left: 2.5rem;
+  padding-right: 2.5rem;
+  box-sizing: border-box;
 }
+body > div.cell img { max-width: 100%; height: auto; }
 
-/* ── Ocean header ───────────────────────────────────────────── */
+/* ── Title block ────────────────────────────────────────────── */
+.quarto-title h1.title {
+  font-size: 3rem;
+  margin-top: 2.2rem;
+  margin-bottom: .6rem;
+}
+.quarto-title .subtitle, p.subtitle {
+  font-family: 'Newsreader', Georgia, serif;
+  font-size: 1.3rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.quarto-title-meta { color: var(--text-muted); font-size: .85em; text-transform: uppercase; letter-spacing: .08em; }
+.quarto-title-meta-heading { color: var(--accent); }
+
+/* ── Header band ────────────────────────────────────────────── */
 .ocean-header {
   width: 100%;
   height: var(--header-height);
   background:
-    /* optional: swap the gradient for url('your-ocean-photo.jpg') center/cover no-repeat */
-    linear-gradient(
-      160deg,
-      var(--ocean-deep)  0%,
-      var(--ocean-mid)   40%,
-      var(--ocean-surface) 75%,
-      var(--ocean-light) 100%
-    );
+    radial-gradient(ellipse at 75% 120%, rgba(255,102,51,.28) 0%, rgba(255,102,51,0) 55%),
+    linear-gradient(170deg, var(--bg-deep) 0%, #07333f 70%, var(--bg) 100%);
   position: relative;
   overflow: hidden;
+  border-bottom: 1px solid var(--rule);
 }
+.ocean-header-overlay { position: absolute; inset: 0; display: flex; align-items: flex-end; }
+.ocean-header-overlay .wave-top { width: 100%; height: 80px; position: absolute; bottom: 0; opacity: .6; }
 
-/* If you have an actual photo, add it as a class on the div:
-   .ocean-header.use-photo { background-image: url('ocean.jpg'); background-size: cover; background-position: center; }
-   .ocean-header.use-photo .ocean-header-overlay { background: rgba(6,45,74,0.55); } */
-
-.ocean-header-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-}
-
-.ocean-header-overlay .wave-top {
-  width: 100%;
-  height: 80px;
-  position: absolute;
-  bottom: 0;
-}
-
-/* light shimmer effect */
-.ocean-header::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    90deg,
-    rgba(255,255,255,0.00) 0px,
-    rgba(255,255,255,0.03) 2px,
-    rgba(255,255,255,0.00) 4px
-  );
-  animation: shimmer 8s linear infinite;
-}
-
-@keyframes shimmer {
-  0%   { transform: translateX(-4px); }
-  100% { transform: translateX(4px); }
-}
-
-/* ── Ocean footer ───────────────────────────────────────────── */
+/* ── Footer ─────────────────────────────────────────────────── */
 .ocean-footer {
   width: 100%;
-  background: linear-gradient(
-    160deg,
-    var(--ocean-deep) 0%,
-    var(--ocean-mid)  60%,
-    var(--ocean-surface) 100%
-  );
+  background: var(--bg-deep);
+  border-top: 2px solid var(--accent);
   color: rgba(255,255,255,0.9);
-  font-family: 'Source Sans 3', sans-serif;
+  font-family: 'Inter', Arial, sans-serif;
   font-size: 13px;
   position: relative;
   margin-top: 3rem;
 }
-
-.ocean-footer-waves {
-  width: 100%;
-  height: 60px;
-  overflow: hidden;
-  line-height: 0;
-}
-
-.ocean-footer-waves svg {
-  width: 100%;
-  height: 60px;
-}
-
+.ocean-footer-waves { display: none; }
 .ocean-footer-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: .9rem 2.5rem 1.2rem;
-  flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1.5rem; padding: 1.2rem 2.5rem 1.4rem; flex-wrap: wrap;
 }
+.footer-left  { display: flex; align-items: center; gap: .4rem; }
+.footer-name  { font-weight: 600; font-size: 14px; color: #ffffff; }
+.footer-sep   { color: var(--accent); }
+.footer-role  { color: var(--text-secondary); font-weight: 300; }
+.footer-center { text-align: center; flex: 1 1 auto; color: var(--text-secondary); line-height: 1.5; }
+.footer-right { text-align: right; line-height: 1.6; }
+.footer-link  { color: var(--link); border: none; font-size: 12.5px; }
+.footer-link:hover { color: #ffffff; }
+.footer-datasphere { color: var(--text-muted); font-size: 11.5px; font-style: italic; }
 
-.footer-left {
-  display: flex;
-  align-items: center;
-  gap: .4rem;
-  flex: 0 0 auto;
-}
-
-.footer-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: #ffffff;
-  letter-spacing: 0.01em;
-}
-
-.footer-sep {
-  color: rgba(255,255,255,0.4);
-}
-
-.footer-role {
-  color: rgba(255,255,255,0.7);
-  font-weight: 300;
-}
-
-.footer-center {
-  text-align: center;
-  flex: 1 1 auto;
-  color: rgba(255,255,255,0.75);
-  line-height: 1.5;
-}
-
-.footer-institution {
-  font-weight: 600;
-  color: rgba(255,255,255,0.9);
-  font-size: 12.5px;
-}
-
-.footer-program {
-  font-size: 11.5px;
-  color: rgba(255,255,255,0.55);
-}
-
-.footer-right {
-  text-align: right;
-  flex: 0 0 auto;
-  line-height: 1.6;
-}
-
-.footer-link {
-  color: var(--ocean-foam);
-  text-decoration: none;
-  font-size: 12.5px;
-  font-weight: 400;
-}
-
-.footer-link:hover {
-  text-decoration: underline;
-  color: #ffffff;
-}
-
-.footer-datasphere {
-  color: rgba(255,255,255,0.5);
-  font-size: 11.5px;
-  font-style: italic;
-}
-
-/* ── Table styling ──────────────────────────────────────────── */
-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1.5rem 0;
-  font-size: 0.9em;
-}
-
-thead {
-  background: var(--ocean-deep);
-  color: #ffffff;
-}
-
+/* ── Plain HTML tables ──────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; margin: 1.5rem 0; font-size: 0.9em; }
+thead { background: #000000; color: #ffffff; }
 thead th {
-  padding: .6rem 1rem;
-  text-align: left;
-  font-family: 'Source Sans 3', sans-serif;
-  font-weight: 600;
-  font-size: 0.85em;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  padding: .6rem 1rem; text-align: left; font-weight: 600; font-size: .8em;
+  letter-spacing: .06em; text-transform: uppercase;
 }
+tbody tr:nth-child(even) { background: var(--bg-raised); }
+tbody tr:hover { background: #0d4452; }
+tbody td { padding: .5rem 1rem; border-bottom: 1px solid var(--rule); color: var(--text-primary); }
 
-tbody tr:nth-child(even) { background: #f0f7fb; }
-tbody tr:hover           { background: var(--ocean-foam); transition: background 0.15s; }
-
-tbody td {
-  padding: .5rem 1rem;
-  border-bottom: 1px solid var(--rule);
-  color: var(--text-primary);
-}
-
-/* ── Code blocks ────────────────────────────────────────────── */
+/* ── Code ───────────────────────────────────────────────────── */
 pre {
-  background: #f0f5f8;
-  border-left: 3px solid var(--ocean-surface);
+  background: #0d1117;
+  color: #e6edf3;
+  border-left: 3px solid var(--accent-deep);
   border-radius: 0 4px 4px 0;
   padding: 1rem 1.25rem;
   overflow-x: auto;
   line-height: 1.5;
 }
+/* token colours come from `highlight-style: breezedark` in the YAML */
+div.sourceCode, pre.sourceCode { background: #0d1117 !important; }
+
+details.code-fold {
+  margin: 0 0 1.3rem;
+  border-left: 3px solid var(--accent-deep);
+  background: var(--bg-raised);
+  border-radius: 0 4px 4px 0;
+}
+details.code-fold > summary {
+  cursor: pointer; padding: .45rem .85rem; font-size: .82rem; font-weight: 600;
+  color: var(--text-secondary); list-style: none; user-select: none;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+details.code-fold > summary::-webkit-details-marker { display: none; }
+details.code-fold > summary::before {
+  content: "▸"; display: inline-block; margin-right: .5rem; color: var(--accent);
+  transition: transform .15s ease;
+}
+details.code-fold[open] > summary::before { transform: rotate(90deg); }
+details.code-fold > summary:hover { color: #ffffff; }
+details.code-fold pre { margin: 0; border-left: none; border-radius: 0; background: #0d1117; }
+
+/* "Code" menu (code-tools) */
+.quarto-title-meta .code-tools-button, #quarto-code-tools-source,
+.dropdown-menu { background: var(--bg-deep); color: var(--text-secondary); border: 1px solid var(--rule); }
+.dropdown-item { color: var(--text-secondary); }
+.dropdown-item:hover { background: var(--bg-raised); color: #ffffff; }
 
 /* ── Callout / blockquote ───────────────────────────────────── */
 blockquote {
-  border-left: 3px solid var(--ocean-light);
+  border-left: 3px solid var(--accent);
   margin: 1.5rem 0;
-  padding: .5rem 1.25rem;
+  padding: .6rem 1.25rem;
   color: var(--text-secondary);
-  font-style: italic;
-  background: #f7fbfd;
+  background: var(--bg-raised);
 }
 
-/* ── Figure captions ────────────────────────────────────────── */
-figcaption, .figure-caption {
-  font-size: 0.85em;
-  color: var(--text-secondary);
-  text-align: center;
-  margin-top: .4rem;
-}
+/* ── Figures ────────────────────────────────────────────────── */
+figure img, .cell-output-display img { border-radius: 4px; }
+figcaption, .figure-caption { font-size: .85em; color: var(--text-muted); text-align: center; margin-top: .4rem; }
+a.lightbox { border: none; }
+a.lightbox img { cursor: zoom-in; transition: opacity .15s; }
+a.lightbox img:hover { opacity: .92; }
+.goverlay { background: rgba(0, 19, 31, .96) !important; }   /* lightbox backdrop */
 
-/* ── Quarto-specific overrides ──────────────────────────────── */
-#quarto-document-content { padding-top: 0; }
+/* ── TOC ────────────────────────────────────────────────────── */
+#TOC, #toc-sidebar, nav[role="doc-toc"] { border-left: 1px solid var(--rule); }
+#TOC a, #toc-sidebar a, nav[role="doc-toc"] a { color: var(--text-secondary); border: none; font-size: .88em; }
+#TOC a:hover, nav[role="doc-toc"] a:hover { color: var(--accent); }
+#toc-title, nav[role="doc-toc"] h2 { color: var(--accent); border: none; font-size: 1rem; text-transform: uppercase; letter-spacing: .08em; }
 
-/* Title block */
-.quarto-title-meta { color: var(--text-secondary); font-size: 0.9em; }
-.quarto-title h1.title { margin-top: 2rem; }
-
-/* TOC sidebar */
-#toc-sidebar { border-left: 2px solid var(--rule); }
-#toc-sidebar a { color: var(--text-secondary); font-size: 0.88em; }
-#toc-sidebar a:hover { color: var(--accent); }
-#toc-sidebar a.active { color: var(--ocean-deep); font-weight: 600; }
+/* ── Widgets ────────────────────────────────────────────────── */
+.plotly.html-widget, .reactable { margin: 1.5rem 0; }
 
 /* ── Print ──────────────────────────────────────────────────── */
 @media print {
-  .ocean-header, .ocean-footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body, .ocean-header, .ocean-footer { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { font-size: 11pt; }
-  h1 { font-size: 1.8rem; }
 }
 
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 700px) {
+  #quarto-content, .content, main, #quarto-document-content, .quarto-title-block {
+    padding-left: 1.2rem; padding-right: 1.2rem;
+  }
   .ocean-footer-content { flex-direction: column; text-align: center; gap: .75rem; }
   .footer-right { text-align: center; }
-  :root { --header-height: 140px; }
-}
-
-details.code-fold {
-  margin: 0 0 1.3rem;
-  border-left: 3px solid var(--ocean-light);
-  background: #f7fbfd;
-  border-radius: 0 4px 4px 0;
-}
-details.code-fold > summary {
-  cursor: pointer;
-  padding: .45rem .85rem;
-  font-size: .85rem;
-  font-weight: 600;
-  color: var(--ocean-mid);
-  list-style: none;
-  user-select: none;
-}
-details.code-fold > summary::-webkit-details-marker { display: none; }
-details.code-fold > summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: .5rem;
-  transition: transform .15s ease;
-}
-details.code-fold[open] > summary::before { transform: rotate(90deg); }
-details.code-fold > summary:hover { color: var(--ocean-surface); }
-details.code-fold[open] > summary::before { transform: rotate(90deg); }
-details.code-fold > summary:hover { color: var(--ocean-surface); }
-
-details.code-fold pre {
-  margin: 0;
-  border-left: none;
-  border-radius: 0;
-  background: transparent;
-}
-.leaflet-container {
-  max-width: 800px;
-  height: 480px !important;
-  margin: 1.5rem auto;
-  border-radius: 4px;
-}
-.plotly.html-widget,
-.reactable {
-  max-width: 800px !important;
-  margin: 1.5rem auto;
+  :root { --header-height: 130px; }
+  .quarto-title h1.title { font-size: 2.2rem; }
 }

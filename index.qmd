@@ -1,6 +1,6 @@
 ---
 title: "Oil in marine protected areas"
-subtitle: "Which MPAs are exposed to satellite-detected oil slicks, and does protection level matter?"
+subtitle: "Which countries and which MPAs are exposed to satellite-detected oil slicks?"
 date: today
 format:
   html:
@@ -13,19 +13,30 @@ format:
     embed-resources: true
     fig-width: 9
     fig-height: 6
+    lightbox: true          # click any figure to open it full screen
+    code-fold: true         # code shown collapsed under each chunk
+    code-summary: "Show code"
+    code-tools: true
+    highlight-style: breezedark     # pandoc built-in dark theme (works on any Quarto version)
+knitr:
+  opts_chunk:
+    dev.args:
+      bg: "#052832"       # figure background = page background (no white edges)
 execute:
-  echo: false
+  echo: true
   warning: false
   message: false
 ---
 
 ```{r setup}
+#| code-summary: "Setup: packages and data"
 library(data.table)
 library(ggplot2)
 library(scales)
 library(reactable)
 library(sf)
 source("R/plots.R")
+use_dark_theme()   # charts and tables match the dark report stylesheet
 
 exposure <- as.data.table(readRDS("data/mpa_exposure.rds"))
 cls      <- as.data.frame(readRDS("data/class_summary.rds"))
@@ -51,11 +62,8 @@ report notes in passing that marine protected areas are not spared.
 
 This note takes that further with the same underlying data, SkyTruth's
 [Cerulean](https://cerulean.skytruth.org) slick detections from Sentinel-1
-radar, and asks two questions:
-
-1. **Which MPAs are actually exposed to oil**, by name, and how much?
-2. **Does the level of protection make a difference**, once you account for
-   where MPAs sit and how often satellites look at them?
+radar, and asks which countries and which protected areas are actually exposed
+to oil, and how much.
 
 Between `r format(info$start, "%B %Y")` and `r format(info$end, "%B %Y")`,
 Cerulean recorded `r fmt(info$n_slicks)` slicks matched to a nearby vessel or
@@ -63,123 +71,116 @@ platform. Of the `r fmt(nrow(exposure))` marine protected areas in the WDPA,
 **`r fmt(nrow(oiled))` (`r pct(nrow(oiled) / nrow(exposure))`) had at least one
 detected inside them.**
 
-## The most exposed MPAs
+## Country by country
 
-```{r top, fig.height = 9}
-plot_top_mpas(as.data.frame(exposure), info)
+Which countries have the most oil inside their protected areas, and is it a
+few sites or most of them? Each square below is one MPA; countries are ranked
+by the total oil-slick area detected inside their MPAs.
+
+```{r country-ranking, fig.width = 8, fig.height = 8}
+#| code-summary: "Show code: country ranking"
+plot_country_ranking(as.data.frame(exposure), info, 20)
 ```
 
-Ranking by oil area per unit of MPA area favours small coastal sites near busy
-shipping lanes and ports, which is the point: these are the places where a
-protected designation and chronic oil exposure coincide most intensely. MPAs
-smaller than 100 km² or with fewer than three slicks are left out, because a
-single large slick in a tiny reserve produces a spectacular density that says
-little about chronic exposure.
+The squares show how that oil is spread across each country's network: a few
+heavily hit sites, or most of its MPAs.
 
-The top of the list is
-**`r top$NAME[1]`** (`r top$country[1]`, `r top$class_label[1]`), with
-`r top$n_slicks[1]` slicks covering `r fmt(top$oil_km2[1], 1)` km² inside its
-boundary over `r info$n_years` years.
-
-### The largest totals
-
-Density hides the big offshore MPAs, where exposure is diluted by sheer size but
-the absolute amount of oil can be large.
-
-```{r total}
-tt <- exposure[n_slicks > 0][order(-oil_km2)][1:15]
-tt[, y := sprintf("%s  (%s)", ifelse(nchar(NAME) > 42, paste0(substr(NAME, 1, 40), "\u2026"), NAME), country)]
-tt[, y := factor(y, levels = rev(unique(y)))]
-
-ggplot(tt, aes(oil_km2, y, fill = as.character(prot_class))) +
-  geom_col(width = 0.65) +
-  geom_text(aes(label = sprintf("%s slicks", fmt(n_slicks))), hjust = -0.15,
-            size = 3, colour = INK2) +
-  scale_fill_manual(values = CLASS_COLS, labels = info$class_labels,
-                    breaks = names(info$class_labels)) +
-  scale_x_continuous(labels = label_comma(), expand = expansion(mult = c(0, 0.2))) +
-  coord_cartesian(clip = "off") +
-  labs(title = "Where the most oil ends up inside MPAs",
-       subtitle = sprintf("Total oil-slick area detected inside each MPA, %s-%s",
-                          format(info$start, "%Y"), format(info$end, "%Y")),
-       x = "Oil-slick area inside the MPA (km²)", y = NULL) +
-  theme_oil()
+```{r countries, fig.width = 10, fig.height = country_grid_height(as.data.frame(exposure), 20)}
+#| code-summary: "Show code: country grid"
+plot_country_grid(as.data.frame(exposure), info, n_countries = 20)
 ```
 
-## Where
+## MPA-level exposure
 
-```{r map, fig.height = 5.5}
-world <- rnaturalearth::ne_countries(scale = 110, returnclass = "sf")
-m <- st_as_sf(oiled, coords = c("lon", "lat"), crs = 4326)
-bg <- st_as_sf(pts[sample(.N, min(.N, 30000))], coords = c("lon", "lat"), crs = 4326)
+Oil exposure summarised by IUCN protection level, then MPA by MPA. Both tables
+are sortable (click a column header) and the second one is searchable.
 
-ggplot() +
-  geom_sf(data = world, fill = "#e9e8e3", colour = NA) +
-  geom_sf(data = bg, colour = "#52514e", size = 0.05, alpha = 0.25) +
-  geom_sf(data = m[order(-m$oil_km2), ], aes(size = oil_km2, fill = as.character(prot_class)),
-          shape = 21, colour = SURF, stroke = 0.3, alpha = 0.9) +
-  scale_size_area(max_size = 9, labels = label_comma(), name = "km² of oil") +
-  scale_fill_manual(values = CLASS_COLS, labels = info$class_labels,
-                    breaks = names(info$class_labels), name = NULL) +
-  coord_sf(crs = "EPSG:8857", expand = FALSE) +
-  labs(title = "MPAs with oil detected inside them",
-       subtitle = "Circles: MPAs, sized by oil-slick area inside. Grey dots: all detected slicks (sample).") +
-  theme_oil() +
-  guides(size = guide_legend(override.aes = list(fill = MUTED)),
-         fill = guide_legend(override.aes = list(size = 4))) +
-  theme(axis.text.x = element_blank(), axis.text.y = element_blank(),
-        panel.grid.major = element_blank(), legend.box = "vertical")
-```
-
-The pattern follows SkyTruth's global hotspots: the Mediterranean and Black
-Sea, the Red Sea and Persian Gulf, West Africa and Southeast Asia. The grey dots
-also show the limit of this kind of data: open-ocean areas are sparse because
-Sentinel-1 rarely images them, not necessarily because they are clean.
-
-## Does protection level matter?
-
-Comparing the oil density inside MPAs with the global ocean average would be
-misleading: MPAs are mostly coastal, where both shipping and satellite coverage
-are concentrated. Instead, each protection class is compared with the
-unprotected ocean within `r info$ring_km` km of it, which shares the same
-satellite revisit pattern, shipping context and sea state.
-
-```{r classes, fig.height = 7}
-plot_classes(cls, info)
-```
-
-Across all MPAs, oil density inside is `r sprintf("%.2f", a$ratio)` times that of
-the surrounding ocean (95% CI `r sprintf("%.2f-%.2f", a$ratio_lo, a$ratio_hi)`).
+### By protection level
 
 ```{r class-table}
-reactable(
-  data.table(`Protection class` = cls$label,
-             MPAs = cls$n_mpas,
-             `With slicks` = cls$n_mpas_oiled,
-             `Share with slicks` = sprintf("%.1f%%", 100 * cls$n_mpas_oiled / cls$n_mpas),
-             `Density inside` = round(cls$dens_in, 3),
-             `Density around` = round(cls$dens_ring, 3),
-             `Ratio [95% CI]` = sprintf("%.2f [%.2f-%.2f]", cls$ratio, cls$ratio_lo, cls$ratio_hi)),
-  compact = TRUE, pagination = FALSE,
-  defaultColDef = colDef(format = colFormat(separators = TRUE)))
+#| code-summary: "Show code: protection-level table"
+cls_tbl <- data.frame(
+  `Protection class` = cls$label,
+  MPAs               = cls$n_mpas,
+  `With slicks`      = cls$n_mpas_oiled,
+  `Share with slicks` = 100 * cls$n_mpas_oiled / cls$n_mpas,
+  `Density inside`   = cls$dens_in,
+  `Density around`   = cls$dens_ring,
+  `Ratio [95% CI]`   = sprintf("%.2f [%.2f-%.2f]", cls$ratio, cls$ratio_lo, cls$ratio_hi),
+  check.names = FALSE)
+
+reactable(cls_tbl, theme = table_theme(), compact = TRUE, pagination = FALSE,
+          resizable = TRUE,                 # drag a header's right edge to resize
+          striped = TRUE, highlight = TRUE,
+          columns = list(
+            `Protection class`  = colDef(minWidth = 190, style = list(fontWeight = 600)),
+            `Share with slicks` = colDef(format = colFormat(suffix = "%", digits = 1)),
+            `Density inside`    = colDef(format = colFormat(digits = 3)),
+            `Density around`    = colDef(format = colFormat(digits = 3))),
+          defaultColDef = colDef(format = colFormat(separators = TRUE)))
 ```
 
-Densities are km² of slick per 10,000 km² of ocean per year.
+Densities are km² of oil slick per 10,000 km² of ocean per year. "Around" is the
+unprotected ocean within `r info$ring_km` km of the MPAs, which shares their
+satellite coverage and shipping context, so the ratio compares like with like.
 
-## The full table
+### All MPAs with oil
 
-All MPAs with at least one slick detected inside them.
+Every MPA with at least one slick detected inside it, ordered by the total
+oil-slick area inside its boundary (the same measure as the country chart).
+"Oil per 1,000 km²" divides that by the MPA's size: it puts small, heavily hit
+reserves at the top when you sort by it, which is why it is not the default order.
 
 ```{r full}
-ft <- oiled[order(-oil_per_1000km2_yr),
+#| code-summary: "Show code: MPA table"
+ft <- oiled[order(-oil_km2),
             .(MPA = NAME, Country = country, Designation = DESIG_ENG,
-              IUCN = IUCN_CAT, Class = class_label,
-              `Area (km²)` = round(marine_km2),
+              IUCN = IUCN_CAT, `Area (km²)` = marine_km2,
               Slicks = n_slicks, `Months with slicks` = n_months,
-              `Oil inside (km²)` = round(oil_km2, 2),
-              `Oil per 1,000 km² per yr` = round(oil_per_1000km2_yr, 2))]
-reactable(ft, searchable = TRUE, defaultPageSize = 15, compact = TRUE, highlight = TRUE,
+              `Oil inside (km²)` = oil_km2,
+              `Oil per 1,000 km² per yr` = oil_per_1000km2_yr)]
+lvl <- poll_bins(ft$`Oil per 1,000 km² per yr`)
+heat <- setNames(POLL_COLS_LIGHT[seq_along(levels(lvl))], levels(lvl))
+
+# Colour key for the shaded column (light table: darker = more oil)
+key <- htmltools::div(
+  style = "display:flex;flex-wrap:wrap;gap:.35rem 1rem;align-items:center;font-size:.8rem;color:#9cb7c9;margin:.2rem 0 .6rem;",
+  htmltools::span(style = "color:#ffffff;font-weight:600;", "Oil per 1,000 km\u00b2 per yr:"),
+  lapply(names(heat), function(l) htmltools::span(
+    style = "display:inline-flex;align-items:center;gap:.35rem;",
+    htmltools::span(style = sprintf(
+      "width:.95rem;height:.95rem;border-radius:2px;display:inline-block;background:%s;", heat[[l]])),
+    l)),
+  htmltools::span(style = "font-style:italic;", "darker = more oil"))
+
+tbl <- reactable(ft, theme = table_theme(), searchable = TRUE, defaultPageSize = 25,
+          resizable = TRUE,                 # drag a header's right edge to resize
+          compact = TRUE, striped = TRUE, highlight = TRUE,
+          height = 640,                     # scroll inside the table: header stays put
+          columns = list(
+            # MPA and Country stay frozen on the left when scrolling sideways
+            MPA         = colDef(minWidth = 220, sticky = "left",
+                                 style = list(fontWeight = 600, background = "inherit"),
+                                 headerStyle = list(background = "#cfe0e6")),
+            Country     = colDef(minWidth = 120, sticky = "left",
+                                 style = list(background = "inherit",
+                                              borderRight = "1px solid #b7cdd5"),
+                                 headerStyle = list(background = "#cfe0e6",
+                                                    borderRight = "1px solid #b7cdd5")),
+            Designation = colDef(minWidth = 160),
+            IUCN        = colDef(minWidth = 115, align = "center"),
+            `Area (km²)` = colDef(format = colFormat(separators = TRUE, digits = 0)),
+            `Oil inside (km²)` = colDef(format = colFormat(separators = TRUE, digits = 1)),
+            `Oil per 1,000 km² per yr` = colDef(
+              format = colFormat(digits = 2),
+              style = function(value, index) {
+                bg <- heat[[as.character(lvl[index])]]
+                list(background = bg, fontWeight = 600,
+                     color = if (as.integer(lvl[index]) >= 4) "#ffffff" else TABLE_INK)
+              })),
           defaultColDef = colDef(format = colFormat(separators = TRUE)))
+
+htmltools::tagList(key, tbl)
 ```
 
 ## Caveats
@@ -221,6 +222,12 @@ Slicks: `r info$slick_filter`, `r format(info$start)` to `r format(info$end)`.
 Grid: `r info$res_km` km equal-area (Equal Earth). Ring: `r info$ring_km` km.
 Bootstrap: `r fmt(info$n_boot)` resamples of months. Data built on
 `r format(info$run_date)`.
+
+The chart functions live in `R/plots.R`:
+
+```{r plots-code, eval = FALSE, file = "R/plots.R"}
+#| code-summary: "Show code: R/plots.R"
+```
 
 Oil slick data: SkyTruth Cerulean, derived from Copernicus Sentinel-1 imagery.
 Protected areas: UNEP-WCMC and IUCN, World Database on Protected Areas,

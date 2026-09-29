@@ -17,10 +17,14 @@
 # =============================================================================
 
 # ---- 0. Packages -------------------------------------------------------------
+# An active conda env (e.g. anaconda "base") points PROJ/GDAL to its own, older
+# databases, which breaks terra ("proj.db ... DATABASE.LAYOUT.VERSION.MINOR").
+# Must run BEFORE sf/terra are loaded: restart R if they already are.
+Sys.unsetenv(c("PROJ_LIB", "PROJ_DATA", "GDAL_DATA"))
 pkgs <- c("httr2", "sf", "terra", "dplyr", "tidyr", "purrr", "readr",
           "wdpar", "rnaturalearth", "countrycode", "chromote")
 new <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
-if (length(new)) install.packages(new)
+if (length(new)) install.packages(new, repos = "https://cloud.r-project.org")
 suppressPackageStartupMessages({
   library(httr2); library(sf); library(terra); library(dplyr)
   library(tidyr); library(purrr); library(readr)
@@ -145,20 +149,35 @@ if (file.exists(mpa_cache)) {
   wdpa <- st_sf(setNames(st_drop_geometry(wdpa), toupper(names(st_drop_geometry(wdpa)))),
                 geometry = st_geometry(wdpa))
 
-  is_marine <- if ("MARINE" %in% names(wdpa)) {
-    as.character(wdpa$MARINE) %in% c("1", "2")          # 1 = coastal, 2 = marine
-  } else if ("REALM" %in% names(wdpa)) {
-    grepl("marine|coastal", wdpa$REALM, ignore.case = TRUE)
-  } else stop("Cannot find a MARINE or REALM field in the WDPA: check names(wdpa)")
-  is_poly <- as.character(st_geometry_type(wdpa)) %in% c("POLYGON", "MULTIPOLYGON")
+  message("WDPA columns: ", paste(names(wdpa), collapse = ", "))
 
-  area_col <- intersect(c("GIS_M_AREA", "REP_M_AREA"), names(wdpa))[1]
-  mpa <- wdpa[is_marine & is_poly, ] |>
-    filter(STATUS %in% c("Designated", "Inscribed", "Established"),
-           !grepl("UNESCO-MAB", DESIG_ENG, fixed = TRUE)) |>   # biosphere reserves: not MPAs
-    transmute(WDPAID, NAME, DESIG_ENG, ISO3, IUCN_CAT = trimws(IUCN_CAT),
-              STATUS_YR, marine_km2 = suppressWarnings(as.numeric(.data[[area_col]]))) |>
-    st_make_valid()
+  # The WDPA schema changed in 2025-26 (e.g. WDPAID -> SITE_ID, MARINE -> REALM):
+  # take whichever of the candidate column names exists.
+  pick <- function(...) {
+    cn <- intersect(c(...), names(wdpa))[1]
+    if (is.na(cn)) rep(NA_character_, nrow(wdpa)) else wdpa[[cn]]
+  }
+  realm <- as.character(pick("MARINE", "REALM"))
+  is_marine <- realm %in% c("1", "2") |                      # old schema: 1 coastal, 2 marine
+    grepl("marine|coastal", realm, ignore.case = TRUE)       # new schema: text
+  if (!any(is_marine)) stop("No marine sites found: check the MARINE/REALM column above")
+  is_poly  <- as.character(st_geometry_type(wdpa)) %in% c("POLYGON", "MULTIPOLYGON")
+  status   <- as.character(pick("STATUS"))
+  desig    <- as.character(pick("DESIG_ENG", "DESIG"))
+  keep_status <- is.na(status) | status %in% c("Designated", "Inscribed", "Established")
+  not_mab  <- !grepl("UNESCO-MAB|Biosphere", desig, ignore.case = TRUE)  # not MPAs
+  keep <- is_marine & is_poly & keep_status & not_mab
+
+  mpa <- st_sf(
+    WDPAID     = as.character(pick("WDPAID", "SITE_ID", "WDPA_ID"))[keep],
+    NAME       = as.character(pick("NAME_ENG", "NAME", "ORIG_NAME"))[keep],
+    DESIG_ENG  = desig[keep],
+    ISO3       = as.character(pick("ISO3", "PARENT_ISO3", "PRNT_ISO3", "PARENT_ISO"))[keep],
+    IUCN_CAT   = trimws(as.character(pick("IUCN_CAT")))[keep],
+    STATUS_YR  = suppressWarnings(as.integer(pick("STATUS_YR")))[keep],
+    marine_km2 = suppressWarnings(as.numeric(pick("GIS_M_AREA", "REP_M_AREA")))[keep],
+    geometry   = st_geometry(wdpa)[keep]
+  ) |> st_make_valid()
   rm(wdpa); invisible(gc())
   st_write(mpa, mpa_cache, quiet = TRUE, delete_dsn = TRUE)
 }

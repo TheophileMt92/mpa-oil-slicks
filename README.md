@@ -25,12 +25,12 @@ oil density inside each protection class with the unprotected ocean around it.
 ```r
 install.packages(c("httr2", "sf", "terra", "dplyr", "tidyr", "purrr", "readr",
                    "wdpar", "chromote", "rnaturalearth", "rnaturalearthdata",
-                   "countrycode", "data.table", "ggplot2", "scales", "reactable"))
+                   "countrycode", "data.table", "ggplot2", "ggrepel", "scales", "reactable"))
 ```
 
 ```bash
 Rscript prep/build_data.R      # first run 30-60 min; caches in raw/ (gitignored)
-Rscript linkedin_figures.R     # outputs/fig_most_exposed_mpas.png, fig_protection_classes.png
+Rscript linkedin_figures.R     # outputs/: beeswarm, dark map, protection classes
 quarto render index.qmd        # index.html, for GitHub Pages
 ```
 
