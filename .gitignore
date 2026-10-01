@@ -7,3 +7,8 @@ index_files/
 .RData
 .DS_Store
 renv/
+.venv/
+__pycache__/
+frames/
+figures/preview_*.png
+figures/*_draft.mp4
