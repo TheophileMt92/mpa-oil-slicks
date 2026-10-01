@@ -55,18 +55,21 @@ SUPER = 4                             # sub-cells per side when measuring slick 
 #   density  the same values smoothed over ~SMOOTH_KM: where slicks concentrate
 VERSIONS = {
     "exact": dict(
-        smooth_km=0,
-        subtitle="Each column: oil slick area detected by satellite in a 2 km cell, "
-                 "accumulating since Jan 2023.\nOutlines: marine protected areas."),
+        smooth_km=0, mpa_fill=True,
+        subtitle="Spikes: oil slick area detected by satellite in each 2 km cell, "
+                 "since Jan 2023.\nMarine Protected Areas (MPAs) take colour as oil "
+                 "accumulates inside them."),
     "density": dict(
-        smooth_km=6,
-        subtitle="Density of oil slicks detected by satellite since Jan 2023, smoothed over "
-                 "~6 km.\nPeaks show where slicks concentrate, not their size. "
-                 "Outlines: marine protected areas."),
+        smooth_km=6, mpa_fill=False,
+        subtitle="Density of oil slicks detected by satellite since Jan 2023, smoothed "
+                 "over ~6 km.\nPeaks show where slicks concentrate, not their size. "
+                 "Outlines: MPAs."),
 }
 VERSION = "exact"
 SMOOTH_KM = 0                         # set from VERSIONS (0 = raw cells)
 SUBTITLE = VERSIONS["exact"]["subtitle"]
+MPA_FILL_ON = True                    # set from VERSIONS: MPAs coloured by report class
+UP = 3                                # display grid = 2 km / UP (finer MPA borders, crisp columns)
 RELIEF_MAX = 0.12                     # highest peak, as a share of the map width
 HEIGHT_GAMMA = 1.0                    # 1 = height proportional to oil (<1 lifts low values)
 START, END = date(2023, 1, 1), date(2025, 12, 31)
@@ -83,10 +86,15 @@ ORBIT_FROM, ORBIT_TO = -8, 8          # slow camera drift over the three years
 SUN_AZ, SUN_ELEV = 300, 25            # low sun from the west-northwest
 SUN_INT, ENV_INT = 3.2, 0.55
 ZOOM = 0.60                           # orthographic half-height, in map widths
-LOOK_SHIFT = -0.25                    # >0 moves the map up the frame, <0 down
+LOOK_SHIFT = -0.28                    # >0 moves the map up the frame, <0 down
 
 # Colours: the ramp starts at the sea colour, so clean water stays flat and dark
-SEA, LAND, MPA_LINE = "#052832", "#2c3d43", "#5fb3b3"
+SEA, LAND, MPA_LINE = "#052832", "#2c3d43", "#4f9a9c"
+MPA_FILL = "#0b3f4a"                  # MPAs not (yet) reached by oil
+# Report classes for MPAs (km2 of slick per 1,000 km2 of MPA per year), as in the report
+BREAKS = [0.1, 0.6, 2]
+BREAK_LABS = ["< 0.1", "0.1-0.6", "0.6-2", "> 2"]
+POLL = ["#fcc5a0", "#f6874f", "#e04a24", "#c01f14"]
 RAMP_STOPS = [(0.00, "#052832"), (0.06, "#4a1a3c"), (0.30, "#a3201c"),
               (0.55, "#e04a24"), (0.80, "#f6a06a"), (1.00, "#fff1e0")]
 INK, INK2, MUTED, ACCENT = "#ffffff", "#9cb7c9", "#6f8a99", "#ff6633"
@@ -94,7 +102,7 @@ INK, INK2, MUTED, ACCENT = "#ffffff", "#9cb7c9", "#6f8a99", "#ff6633"
 ROOT = Path.cwd()
 RAW, FIG = ROOT / "raw", ROOT / "figures"
 FRAMES = ROOT / "frames" / "relief"
-CACHE = RAW / "relief_cache.npz"
+CACHE = RAW / "relief_cache_v2.npz"
 LAND_URL = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
             "master/geojson/ne_10m_land.geojson")
 
@@ -145,9 +153,20 @@ def build_cache() -> None:
     mpa["geometry"] = mpa.geometry.difference(land_union)
     mpa = mpa[~mpa.geometry.is_empty]
     mpa = mpa.dissolve(by="WDPAID", aggfunc="first").reset_index()
-    outline = features.rasterize([(g, 1) for g in mpa.geometry.boundary if not g.is_empty],
-                                 out_shape=(nrow, ncol), transform=transform, fill=0,
-                                 dtype="uint8", all_touched=True)
+    area = mpa["marine_km2"].astype(float)
+    mpa_area = area.where(area > 0, mpa.geometry.area / 1e6).to_numpy()
+
+    # Display grid (2 km / UP): land, MPA borders (one fine cell wide), MPA footprints
+    fres = RES / UP
+    ftr = from_origin(xmin, ymax, fres, fres)
+    fshape = (nrow * UP, ncol * UP)
+    land_f = features.rasterize([(land_union, 1)], out_shape=fshape, transform=ftr,
+                                fill=0, dtype="uint8")
+    outline_f = features.rasterize(
+        [(g, 1) for g in mpa.geometry.boundary if not g.is_empty], out_shape=fshape,
+        transform=ftr, fill=0, dtype="uint8", all_touched=False)
+    mpa_f = features.rasterize([(g, 1) for g in mpa.geometry], out_shape=fshape,
+                               transform=ftr, fill=0, dtype="uint8")
 
     # Slicks
     sl = gpd.read_file(RAW / "region_slicks.gpkg").to_crs(CRS)
@@ -188,8 +207,25 @@ def build_cache() -> None:
     pairs = gpd.overlay(sl[["dnum", "geometry"]], mpa[["geometry"]].assign(mid=mpa.index),
                         how="intersection", keep_geom_type=True)
 
+    # Fine pixels of each MPA reached by oil, so its colour can change per frame
+    pix_mid, pix_idx = [], []
+    for m in np.unique(pairs["mid"]):
+        g = mpa.geometry.iloc[m]
+        bx0, by0, bx1, by1 = g.bounds                 # rasterise only the MPA's window
+        c0 = max(int((bx0 - xmin) // fres) - 1, 0); c1 = min(int((bx1 - xmin) // fres) + 2, fshape[1])
+        r0 = max(int((ymax - by1) // fres) - 1, 0); r1 = min(int((ymax - by0) // fres) + 2, fshape[0])
+        if c1 <= c0 or r1 <= r0:
+            continue
+        mk = features.rasterize([(g, 1)], out_shape=(r1 - r0, c1 - c0), fill=0, dtype="uint8",
+                                transform=from_origin(xmin + c0 * fres, ymax - r0 * fres,
+                                                      fres, fres), all_touched=True)
+        rr, cc = np.nonzero(mk)
+        pix_mid.append(np.full(rr.size, m)); pix_idx.append((rr + r0) * fshape[1] + cc + c0)
+
     np.savez_compressed(
-        CACHE, nrow=nrow, ncol=ncol, land=land_mask, outline=outline, n_mpa=len(mpa),
+        CACHE, nrow=nrow, ncol=ncol, land=land_mask, n_mpa=len(mpa), mpa_area=mpa_area,
+        land_f=land_f, outline_f=outline_f, mpa_f=mpa_f,
+        pix_mid=np.concatenate(pix_mid), pix_idx=np.concatenate(pix_idx),
         sl_dnum=sl["dnum"].to_numpy(),
         cov_sid=np.concatenate(cov_sid), cov_idx=np.concatenate(cov_idx),
         cov_frac=np.concatenate(cov_frac).astype(np.float32),
@@ -244,13 +280,15 @@ class Scene:
         self.c = c
         self.nrow, self.ncol = int(c["nrow"]), int(c["ncol"])
         self.sea = c["land"] == 0
+        self.sea_f = c["land_f"] == 0
+        self.n_years = ((END - START).days + 1) / 365.25
         # Fixed scale: the end state, so heights and colours are comparable across frames
         final = self.density(10 ** 6)
         self.vmax = float(np.quantile(final[final > 0], 0.999))
         self.k = None
 
     def density(self, today: int) -> np.ndarray:
-        """Cumulative km2 of slick per 1,000 km2 of sea, smoothed."""
+        """Cumulative km2 of slick per 1,000 km2 of sea (2 km grid), smoothed if asked."""
         c = self.c
         w = ramp(today, c["sl_dnum"])[c["cov_sid"]] * c["cov_frac"]
         v = np.bincount(c["cov_idx"], weights=w, minlength=self.nrow * self.ncol)
@@ -261,19 +299,40 @@ class Scene:
     def state(self, today: int):
         c = self.c
         v = self.density(today)
-        t = np.clip(v / self.vmax, 0, 1)
-        dem = (t ** HEIGHT_GAMMA) * RELIEF_MAX * self.ncol
-        dem[~self.sea] = 0.8                       # land: a low flat plateau
+        t = np.clip(v / self.vmax, 0, 1) ** HEIGHT_GAMMA
+        # Display grid: each 2 km cell becomes UP x UP flat-topped sub-cells (a column)
+        t_f = np.repeat(np.repeat(t, UP, 0), UP, 1)
+        if SMOOTH_KM > 0:
+            t_f = box_blur(t_f, UP // 2 + 1)          # soften the steps of the smooth surface
+        dem = t_f * RELIEF_MAX * self.ncol * UP
+        dem[~self.sea_f] = 0.8 * UP                    # land: a low flat plateau
 
-        albedo = np.empty((self.nrow, self.ncol, 4), np.float32)
+        albedo = np.empty(dem.shape + (4,), np.float32)
         albedo[..., 3] = 1
-        albedo[..., :3] = colour_ramp(t ** HEIGHT_GAMMA)
-        line = (c["outline"] == 1) & self.sea & (t < 0.04)   # MPA outlines on calm water only
-        albedo[line, :3] = lin(MPA_LINE)
-        albedo[~self.sea, :3] = lin(LAND)
+        flat = albedo.reshape(-1, 4)
 
+        # MPA oil to date (as in the report: clipped slick area / MPA area / years)
         oil = np.bincount(c["pr_mid"], weights=c["pr_km2"] * ramp(today, c["pr_dnum"]),
                           minlength=int(c["n_mpa"]))
+        if MPA_FILL_ON:
+            albedo[..., :3] = lin(SEA)
+            albedo[c["mpa_f"] == 1, :3] = lin(MPA_FILL)
+            dens = oil / c["mpa_area"] / self.n_years * 1000
+            lvl = np.where(oil > 0, np.digitize(dens, BREAKS) + 1, 0).astype(np.int8)
+            level = np.zeros(dem.size, np.int8)
+            np.maximum.at(level, c["pix_idx"], lvl[c["pix_mid"]])
+            for k in range(1, 5):
+                flat[level == k, :3] = lin(POLL[k - 1])
+            line = (c["outline_f"].ravel() == 1) & (level == 0)    # borders of clean MPAs
+            flat[line, :3] = lin(MPA_LINE)
+            col = t_f.ravel() > 0
+            flat[col, :3] = colour_ramp(np.maximum(t_f.ravel()[col], 0.10))
+        else:
+            flat[:, :3] = colour_ramp(t_f.ravel())
+            line = (c["outline_f"].ravel() == 1) & (t_f.ravel() < 0.04)
+            flat[line, :3] = lin(MPA_LINE)
+        albedo[~self.sea_f, :3] = lin(LAND)
+
         stats = dict(km2_in=float(oil.sum()), n_mpa=int((oil > 0).sum()),
                      n_slicks=int((c["sl_dnum"] <= today).sum()))
         return dem.astype(np.float32), albedo, stats
@@ -297,12 +356,12 @@ def render(scene: Scene, dem, albedo, orbit_deg: float, width=W, height=H) -> np
 
     if scene.k is None:
         scene.k = _flat_radiance()
-    n = scene.ncol
+    nr, n = dem.shape
     el, az = np.deg2rad(VIEW_ELEV), np.deg2rad(orbit_deg)
-    dist = 3.0 * max(scene.nrow, scene.ncol)
+    dist = 3.0 * max(nr, n)
     origin = (dist * np.cos(el) * np.sin(az), dist * np.sin(el), dist * np.cos(el) * np.cos(az))
     up = (-np.sin(el) * np.sin(az), np.cos(el), -np.sin(el) * np.cos(az))
-    look = (LOOK_SHIFT * scene.nrow * np.sin(az), 0.0, LOOK_SHIFT * scene.nrow * np.cos(az))
+    look = (LOOK_SHIFT * nr * np.sin(az), 0.0, LOOK_SHIFT * nr * np.cos(az))
     cam = {"model": "orthographic", "origin": tuple(o + l for o, l in zip(origin, look)),
            "look_at": look, "up": up, "half_height": ZOOM * n}
     # Render in tiles of a shared virtual sensor (forge3d caps GPU memory per call;
@@ -316,7 +375,7 @@ def render(scene: Scene, dem, albedo, orbit_deg: float, width=W, height=H) -> np
             tw, th = min(TILE, width - x0), min(TILE, height - y0)
             res = hybrid_render_terrain_reference(
                 dem_c, tw, th, cam, spacing=(1.0, 1.0), exaggeration=1.0,
-                albedo_map=alb_c, albedo_sampling="bilinear",
+                albedo_map=alb_c, albedo_sampling="nearest",
                 sensor_rect=(x0 / width, y0 / height, (x0 + tw) / width, (y0 + th) / height),
                 full_width=width, full_height=height, pixel_offset=(x0, y0),
                 sun_azimuth_deg=SUN_AZ, sun_elevation_deg=SUN_ELEV, sun_intensity=SUN_INT,
@@ -349,33 +408,60 @@ def compose(rgb: np.ndarray, d: date, stats: dict, scene: Scene, out: Path,
       fontweight="bold", va="top", linespacing=1.05)
     t(0.94, 0.955, d.strftime("%b %Y"), color=ACCENT, fontsize=20, fontweight="bold",
       va="top", ha="right")
-    t(0.06, 0.865, SUBTITLE, color=INK2, fontsize=8.4,
-      va="top", linespacing=1.35)
-    # continuous legend, same scale (and same height curve) as the relief
-    x0, x1, y0, y1 = 0.06, 0.46, 0.808, 0.820
+    # Text sizes chosen to stay legible on a phone (the image is shown ~3x smaller)
+    SMALL, LABEL = 8.5, 9.5
+    t(0.06, 0.880, SUBTITLE, color=INK2, fontsize=LABEL, va="top", linespacing=1.3)
+    x0, x1, y0, y1 = 0.06, 0.44, 0.795, 0.810
+    if MPA_FILL_ON:
+        # Two legends side by side: spikes (left), MPAs (right)
+        cell_km2 = (RES / 1000) ** 2
+        top = scene.vmax / 1000 * cell_km2                # tallest spike, km2 per cell
+        t(x0, 0.818, "Oil slicks (spike height and colour)", color=INK, fontsize=LABEL,
+          va="bottom", fontweight="bold")
+    else:
+        top = scene.vmax
+        t(x0, 0.818, "Oil slick density (height and colour)", color=INK, fontsize=LABEL,
+          va="bottom", fontweight="bold")
     tt = np.linspace(0, 1, 256)
     bar = colour_ramp(tt ** HEIGHT_GAMMA)
     bar = np.where(bar <= 0.0031308, 12.92 * bar, 1.055 * bar ** (1 / 2.4) - 0.055)
-    ax.imshow(bar[None, :, :], extent=(x0, x1, y0, y1), aspect="auto",
-              transform=ax.transAxes)
-    for f in (0, 0.25, 0.5, 0.75, 1):
-        lab = f"{f * scene.vmax:,.0f}" + ("+" if f == 1 else "")
-        t(x0 + f * (x1 - x0), y0 - 0.006, lab, color=INK2, fontsize=7, ha="center", va="top")
-    t(x1 + 0.02, (y0 + y1) / 2, "km² of slick per 1,000 km² of sea\n(cumulative)",
-      color=MUTED, fontsize=7, va="center", linespacing=1.25)
-    t(0.06, 0.775, f"{stats['km2_in']:,.0f} km²", color=ACCENT, fontsize=15,
+    ax.imshow(bar[None, :, :], extent=(x0, x1, y0, y1), aspect="auto", transform=ax.transAxes)
+    nice = [v for v in (1, 2, 5, 10, 20, 50, 100, 200, 500) if top / v <= 4][0]
+    for v in np.arange(0, top - 0.4 * nice, nice):
+        t(x0 + v / top * (x1 - x0), y0 - 0.005, f"{v:,.0f}", color=INK2, fontsize=SMALL,
+          ha="center", va="top")
+    t(x1, y0 - 0.005, f"{top:,.0f}+", color=INK2, fontsize=SMALL, ha="center", va="top")
+    unit = ("km² of slick per 2 × 2 km cell, cumulative" if MPA_FILL_ON
+            else "km² of slick per 1,000 km² of sea, cumulative")
+    t(x0, 0.767, unit, color=MUTED, fontsize=SMALL, va="top")
+
+    if MPA_FILL_ON:
+        x0 = 0.52
+        t(x0, 0.818, "Oil inside Marine Protected Areas", color=INK, fontsize=LABEL,
+          va="bottom", fontweight="bold")
+        for i, (col, lab) in enumerate(zip(POLL, BREAK_LABS)):
+            x = x0 + i * 0.11
+            ax.add_patch(plt.Rectangle((x, y0), 0.026, y1 - y0, color=col,
+                                       transform=ax.transAxes))
+            t(x + 0.033, (y0 + y1) / 2, lab, color=INK2, fontsize=SMALL, va="center")
+        t(x0, 0.767, "km² of slick per 1,000 km² of MPA per year", color=MUTED,
+          fontsize=SMALL, va="top")
+
+    sy = 0.738
+    t(0.06, sy, f"{stats['km2_in']:,.0f} km²", color=ACCENT, fontsize=15,
       fontweight="bold", va="top")
-    t(0.06, 0.742, "cumulative slick area inside MPAs", color=INK2, fontsize=7.8, va="top")
-    t(0.50, 0.775, f"{stats['n_mpa']:,}", color=INK, fontsize=15, fontweight="bold", va="top")
-    t(0.50, 0.742, f"of {int(scene.c['n_mpa']):,} MPAs reached", color=INK2, fontsize=7.8,
+    t(0.06, sy - 0.029, "cumulative slick area inside MPAs", color=INK2, fontsize=LABEL,
       va="top")
+    t(0.52, sy, f"{stats['n_mpa']:,}", color=INK, fontsize=15, fontweight="bold", va="top")
+    t(0.52, sy - 0.029, f"of {int(scene.c['n_mpa']):,} MPAs reached", color=INK2,
+      fontsize=LABEL, va="top")
     if outro:
-        t(0.06, 0.06, f"{stats['n_slicks']:,} slicks in three years. "
-          f"{stats['n_mpa']:,} MPAs reached.", color=INK, fontsize=11, fontweight="bold",
+        t(0.06, 0.07, f"{stats['n_slicks']:,} slicks in three years. "
+          f"{stats['n_mpa']:,} MPAs reached.", color=INK, fontsize=12, fontweight="bold",
           bbox=dict(facecolor=SEA, edgecolor="none", pad=6))
-    t(0.98, 0.012, "More oil from April 2025 partly reflects a second Sentinel-1 satellite (1C)\n"
+    t(0.97, 0.012, "More oil from April 2025 partly reflects a second Sentinel-1 satellite (1C)\n"
       "Data: SkyTruth Cerulean · WDPA (UNEP-WCMC & IUCN) · Théophile Mouton · "
-      "DataSphere Analytics", color=MUTED, fontsize=5.6, ha="right", va="bottom",
+      "DataSphere Analytics", color=MUTED, fontsize=7.5, ha="right", va="bottom",
       linespacing=1.3)
     fig.savefig(out, dpi=dpi, facecolor=SEA)
     plt.close(fig)
@@ -392,7 +478,8 @@ def main() -> int:
                     help="quick video: weekly frames, 12 fps, fewer render passes")
     ap.add_argument("--scale", type=float, default=1.0, help="render size factor (preview)")
     args = ap.parse_args()
-    global VERSION, SMOOTH_KM, SUBTITLE, FRAMES
+    global VERSION, SMOOTH_KM, SUBTITLE, FRAMES, MPA_FILL_ON
+    MPA_FILL_ON = VERSIONS[args.version]["mpa_fill"]
     VERSION = args.version
     SMOOTH_KM = VERSIONS[VERSION]["smooth_km"]
     SUBTITLE = VERSIONS[VERSION]["subtitle"]
